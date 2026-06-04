@@ -8,6 +8,7 @@
     "deploy": "npm run build && wrangler pages deploy dist"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.107.0",
     "date-fns": "^4.1.0",
     "hono": "^4.12.12",
     "lucide-react": "^0.513.0",

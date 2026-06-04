@@ -1,40 +1,68 @@
-import { useState } from 'react'
-import { useApp } from '../context/AppContext'
-import type { Member } from '../types'
-import { Plus, Search, Filter, Edit2, Trash2, Mail, Phone, X, Users, UserCheck, UserX, Eye } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabaseclient'
+import { Plus, Search, Filter, Edit2, Trash2, Mail, Phone, X, Users, UserCheck, UserX, Eye, Loader2, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
+interface Member {
+  id: string
+  nom: string
+  prenom: string
+  telephone: string
+  adresse: string
+  faritra: string
+  sokajy: string
+  created_at: string
+  updated_at: string
+}
+
 const roleColors: Record<string, string> = {
-  pasteur: 'bg-purple-100 text-purple-700',
-  ancien: 'bg-indigo-100 text-indigo-700',
-  diacre: 'bg-blue-100 text-blue-700',
-  responsable: 'bg-amber-100 text-amber-700',
+  Pasteur: 'bg-purple-100 text-purple-700',
+  Mpandray: 'bg-indigo-100 text-indigo-700',
+  Diakona: 'bg-blue-100 text-blue-700',
+  "Vita batisa": 'bg-amber-100 text-amber-700',
   membre: 'bg-gray-100 text-gray-700',
-}
-const statusColors: Record<string, string> = {
-  actif: 'bg-green-100 text-green-700',
-  inactif: 'bg-red-100 text-red-700',
-  visiteur: 'bg-amber-100 text-amber-700',
+  visiteur: 'bg-green-100 text-green-700',
 }
 
-const defaultMember: Omit<Member, 'id'> = {
-  firstName: '', lastName: '', email: '', phone: '', address: '',
-  birthDate: '', joinDate: new Date().toISOString().split('T')[0],
-  status: 'actif', role: 'membre', groups: [], notes: '',
+// Traduction des rôles en français
+const roleLabels: Record<string, string> = {
+  Pasteur: 'Pasteur',
+  Mpandray: 'Mpandray (Accueil)',
+  Diakona: 'Diacre',
+  "Vita batisa": 'Vita Batisa (Baptisé)',
+  membre: 'Membre',
+  visiteur: 'Visiteur',
 }
 
-function MemberModal({ member, onClose, onSave }: {
+const defaultMember = {
+  nom: '',
+  prenom: '',
+  telephone: '',
+  adresse: '',
+  faritra: '',
+  sokajy: 'Mpandray',
+}
+
+function MemberModal({ member, onClose, onSave, saving }: {
   member: Member | null
   onClose: () => void
-  onSave: (m: Member) => void
+  onSave: (m: any) => void
+  saving: boolean
 }) {
-  const [form, setForm] = useState<Omit<Member, 'id'>>(member ? { ...member } : { ...defaultMember })
+  const [form, setForm] = useState({
+    nom: member?.nom || '',
+    prenom: member?.prenom || '',
+    telephone: member?.telephone || '',
+    adresse: member?.adresse || '',
+    faritra: member?.faritra || '',
+    sokajy: member?.sokajy || 'Mpandray',
+  })
   const isEdit = !!member
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSave({ ...form, id: member?.id || crypto.randomUUID() })
+    onSave(form)
   }
 
   return (
@@ -44,77 +72,54 @@ function MemberModal({ member, onClose, onSave }: {
           <h3 className="text-xl font-bold text-gray-800">
             {isEdit ? 'Modifier le membre' : 'Ajouter un membre'}
           </h3>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-gray-600" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Prénom *</label>
-              <input required className="input-field" value={form.firstName}
-                onChange={e => setForm(p => ({ ...p, firstName: e.target.value }))} />
+              <input required className="input-field" value={form.prenom}
+                onChange={e => setForm(p => ({ ...p, prenom: e.target.value }))} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
-              <input required className="input-field" value={form.lastName}
-                onChange={e => setForm(p => ({ ...p, lastName: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input type="email" className="input-field" value={form.email}
-                onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+              <input required className="input-field" value={form.nom}
+                onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
-              <input className="input-field" value={form.phone}
-                onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
+              <input className="input-field" value={form.telephone}
+                onChange={e => setForm(p => ({ ...p, telephone: e.target.value }))} />
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
-              <input className="input-field" value={form.address}
-                onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
+              <input className="input-field" value={form.adresse}
+                onChange={e => setForm(p => ({ ...p, adresse: e.target.value }))} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date de naissance</label>
-              <input type="date" className="input-field" value={form.birthDate}
-                onChange={e => setForm(p => ({ ...p, birthDate: e.target.value }))} />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Faritra/Région</label>
+              <input className="input-field" value={form.faritra}
+                onChange={e => setForm(p => ({ ...p, faritra: e.target.value }))} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date d'adhésion</label>
-              <input type="date" className="input-field" value={form.joinDate}
-                onChange={e => setForm(p => ({ ...p, joinDate: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Statut</label>
-              <select className="input-field" value={form.status}
-                onChange={e => setForm(p => ({ ...p, status: e.target.value as Member['status'] }))}>
-                <option value="actif">Actif</option>
-                <option value="inactif">Inactif</option>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Rôle / Catégorie</label>
+              <select className="input-field" value={form.sokajy}
+                onChange={e => setForm(p => ({ ...p, sokajy: e.target.value }))}>
+                <option value="Pasteur">Pasteur</option>
+                <option value="Mpandray">Mpandray (Accueil)</option>
+                <option value="Diakona">Diakona (Diacre)</option>
+                <option value="Vita batisa">Vita batisa (Baptisé)</option>
+                <option value="membre">Membre</option>
                 <option value="visiteur">Visiteur</option>
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Rôle</label>
-              <select className="input-field" value={form.role}
-                onChange={e => setForm(p => ({ ...p, role: e.target.value as Member['role'] }))}>
-                <option value="membre">Membre</option>
-                <option value="diacre">Diacre</option>
-                <option value="pasteur">Pasteur</option>
-                <option value="ancien">Ancien</option>
-                <option value="responsable">Responsable</option>
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-              <textarea rows={3} className="input-field resize-none" value={form.notes}
-                onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
             </div>
           </div>
           <div className="flex gap-3 pt-4 border-t">
             <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center">Annuler</button>
-            <button type="submit" className="btn-primary flex-1 justify-center">
-              {isEdit ? 'Modifier' : 'Ajouter'}
+            <button type="submit" disabled={saving} className="btn-primary flex-1 justify-center">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (isEdit ? 'Modifier' : 'Ajouter')}
             </button>
           </div>
         </form>
@@ -129,45 +134,51 @@ function MemberDetailModal({ member, onClose, onEdit }: { member: Member, onClos
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         <div className="flex items-center justify-between p-6 border-b">
           <h3 className="text-xl font-bold text-gray-800">Détails du membre</h3>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-gray-600" />
           </button>
         </div>
         <div className="p-6">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center">
               <span className="text-2xl font-bold text-indigo-700">
-                {member.firstName[0]}{member.lastName[0]}
+                {member.prenom?.[0]}{member.nom?.[0]}
               </span>
             </div>
             <div>
-              <h4 className="text-xl font-bold text-gray-800">{member.firstName} {member.lastName}</h4>
+              <h4 className="text-xl font-bold text-gray-800">{member.prenom} {member.nom}</h4>
               <div className="flex items-center gap-2 mt-1">
-                <span className={`badge ${roleColors[member.role]}`}>{member.role}</span>
-                <span className={`badge ${statusColors[member.status]}`}>{member.status}</span>
+                <span className={`badge ${roleColors[member.sokajy] || roleColors.membre}`}>
+                  {roleLabels[member.sokajy] || member.sokajy}
+                </span>
               </div>
             </div>
           </div>
           <div className="space-y-3 text-sm">
-            {member.email && <div className="flex items-center gap-3 text-gray-600"><Mail className="w-4 h-4" />{member.email}</div>}
-            {member.phone && <div className="flex items-center gap-3 text-gray-600"><Phone className="w-4 h-4" />{member.phone}</div>}
-            {member.address && <p className="text-gray-600 pl-7">{member.address}</p>}
-            {member.birthDate && (
-              <p className="text-gray-600">📅 Né(e) le {format(new Date(member.birthDate), 'd MMMM yyyy', { locale: fr })}</p>
-            )}
-            <p className="text-gray-600">
-              🕊️ Membre depuis {format(new Date(member.joinDate), 'd MMMM yyyy', { locale: fr })}
-            </p>
-            {member.notes && (
-              <div className="bg-gray-50 rounded-xl p-3 mt-2">
-                <p className="text-xs font-medium text-gray-500 mb-1">Notes</p>
-                <p className="text-gray-700">{member.notes}</p>
+            {member.telephone && (
+              <div className="flex items-center gap-3 text-gray-600">
+                <Phone className="w-4 h-4" /> {member.telephone}
               </div>
             )}
+            {member.adresse && (
+              <div className="flex items-center gap-3 text-gray-600">
+                📍 {member.adresse}
+              </div>
+            )}
+            {member.faritra && (
+              <div className="flex items-center gap-3 text-gray-600">
+                🌍 {member.faritra}
+              </div>
+            )}
+            <p className="text-gray-600">
+              🕊️ Membre depuis {format(new Date(member.created_at), 'd MMMM yyyy', { locale: fr })}
+            </p>
           </div>
           <div className="flex gap-3 mt-6 pt-4 border-t">
             <button onClick={onClose} className="btn-secondary flex-1 justify-center">Fermer</button>
-            <button onClick={onEdit} className="btn-primary flex-1 justify-center"><Edit2 className="w-4 h-4" />Modifier</button>
+            <button onClick={onEdit} className="btn-primary flex-1 justify-center">
+              <Edit2 className="w-4 h-4" /> Modifier
+            </button>
           </div>
         </div>
       </div>
@@ -176,53 +187,268 @@ function MemberDetailModal({ member, onClose, onEdit }: { member: Member, onClos
 }
 
 export default function Membres() {
-  const { members, addMember, updateMember, deleteMember } = useApp()
+  const [members, setMembers] = useState<Member[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState<string>('all')
-  const [filterRole, setFilterRole] = useState<string>('all')
+  const [filterFaritra, setFilterFaritra] = useState<string>('all')
+  const [filterSokajy, setFilterSokajy] = useState<string>('all')
   const [showModal, setShowModal] = useState(false)
   const [editMember, setEditMember] = useState<Member | null>(null)
   const [viewMember, setViewMember] = useState<Member | null>(null)
-  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
+  const [saving, setSaving] = useState(false)
+  const [faritras, setFaritras] = useState<string[]>([])
 
-  const filtered = members.filter(m => {
-    const matchSearch = `${m.firstName} ${m.lastName} ${m.email}`.toLowerCase().includes(search.toLowerCase())
-    const matchStatus = filterStatus === 'all' || m.status === filterStatus
-    const matchRole = filterRole === 'all' || m.role === filterRole
-    return matchSearch && matchStatus && matchRole
-  })
+  // Charger les membres
+  const loadMembers = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('membre')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-  const handleSave = (m: Member) => {
-    if (editMember) updateMember(m)
-    else addMember(m)
-    setShowModal(false)
-    setEditMember(null)
+      if (error) throw error
+      setMembers(data || [])
+      
+      const uniqueFaritras = [...new Set((data || []).map(m => m.faritra).filter(Boolean))] as string[]
+      setFaritras(uniqueFaritras)
+    } catch (error) {
+      console.error('Erreur chargement membres:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm('Supprimer ce membre ?')) deleteMember(id)
+  useEffect(() => {
+    loadMembers()
+  }, [])
+
+  // Fonction d'impression
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      alert('Veuillez autoriser les popups pour imprimer')
+      return
+    }
+
+    const today = new Date()
+    const formattedDate = format(today, 'dd/MM/yyyy HH:mm')
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Liste des membres - Église</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Arial', sans-serif; padding: 40px; color: #333; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4f46e5; padding-bottom: 20px; }
+          .header h1 { color: #4f46e5; font-size: 24px; margin-bottom: 10px; }
+          .header p { color: #666; font-size: 12px; }
+          .stats { display: flex; justify-content: space-between; margin-bottom: 30px; gap: 15px; }
+          .stat-card { background: #f3f4f6; padding: 15px; border-radius: 8px; text-align: center; flex: 1; }
+          .stat-card .value { font-size: 24px; font-weight: bold; color: #4f46e5; }
+          .stat-card .label { font-size: 12px; color: #666; margin-top: 5px; }
+          .filters-info { background: #f9fafb; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 12px; color: #666; }
+          table { width: 100%; border-collapse: collapse; }
+          th { background: #f3f4f6; padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb; }
+          td { padding: 10px 12px; font-size: 11px; border-bottom: 1px solid #e5e7eb; color: #4b5563; }
+          .badge { display: inline-block; padding: 4px 8px; border-radius: 20px; font-size: 10px; font-weight: 500; }
+          .bg-purple-100 { background: #f3e8ff; color: #6b21a5; }
+          .bg-indigo-100 { background: #e0e7ff; color: #4338ca; }
+          .bg-blue-100 { background: #dbeafe; color: #1e40af; }
+          .bg-amber-100 { background: #fef3c7; color: #92400e; }
+          .bg-gray-100 { background: #f3f4f6; color: #374151; }
+          .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 20px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>📋 Liste des membres de l'Église</h1>
+          <p>Généré le ${formattedDate}</p>
+        </div>
+        <div class="stats">
+          <div class="stat-card"><div class="value">${filtered.length}</div><div class="label">Total affiché</div></div>
+          <div class="stat-card"><div class="value">${members.length}</div><div class="label">Total membres</div></div>
+          <div class="stat-card"><div class="value">${members.filter(m => m.sokajy === 'Pasteur').length}</div><div class="label">Pasteurs</div></div>
+          <div class="stat-card"><div class="value">${members.filter(m => m.sokajy === 'Mpandray').length}</div><div class="label">Mpandray</div></div>
+        </div>
+        ${(filterFaritra !== 'all' || filterSokajy !== 'all') ? `<div class="filters-info"><strong>Filtres appliqués :</strong><br/>${filterFaritra !== 'all' ? `Région: ${filterFaritra} | ` : ''}${filterSokajy !== 'all' ? `Rôle: ${filterSokajy}` : ''}</div>` : ''}
+        <table>
+          <thead><tr><th>#</th><th>Nom complet</th><th>Téléphone</th><th>Adresse</th><th>Région</th><th>Rôle</th><th>Date d'adhésion</th></tr></thead>
+          <tbody>
+            ${filtered.map((member, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td><strong>${member.prenom} ${member.nom}</strong></td>
+                <td>${member.telephone || '-'}</td>
+                <td>${member.adresse?.substring(0, 40) || '-'}</td>
+                <td>${member.faritra || '-'}</td>
+                <td><span class="badge bg-${member.sokajy === 'Pasteur' ? 'purple-100' : member.sokajy === 'Mpandray' ? 'indigo-100' : member.sokajy === 'Diakona' ? 'blue-100' : member.sokajy === 'Vita batisa' ? 'amber-100' : 'gray-100'}">${member.sokajy}</span></td>
+                <td>${format(new Date(member.created_at), 'dd/MM/yyyy')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="footer"><p>Document généré automatiquement - Système de Gestion d'Église</p></div>
+      </body>
+      </html>
+    `
+
+    printWindow.document.write(printContent)
+    printWindow.document.close()
+    printWindow.print()
+  }
+
+  // Ajouter un membre
+  const addMember = async (memberData: any) => {
+    try {
+      setSaving(true)
+      const { data, error } = await supabase
+        .from('membre')
+        .insert([memberData])
+        .select()
+        .single()
+
+      if (error) throw error
+      
+      setMembers([data, ...members])
+      setShowModal(false)
+    } catch (error: any) {
+      console.error('Erreur ajout membre:', error)
+      alert(`Erreur: ${error.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Modifier un membre
+  const updateMember = async (memberData: any) => {
+    if (!editMember) return
+    
+    try {
+      setSaving(true)
+      const { data, error } = await supabase
+        .from('membre')
+        .update(memberData)
+        .eq('id', editMember.id)
+        .select()
+        .single()
+
+      if (error) throw error
+      
+      setMembers(members.map(m => m.id === editMember.id ? data : m))
+      setShowModal(false)
+      setEditMember(null)
+    } catch (error: any) {
+      console.error('Erreur modification membre:', error)
+      alert(`Erreur: ${error.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Supprimer un membre
+  const deleteMember = async (id: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce membre ?')) return
+    
+    try {
+      const { error } = await supabase
+        .from('membre')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      
+      setMembers(members.filter(m => m.id !== id))
+    } catch (error: any) {
+      console.error('Erreur suppression membre:', error)
+      alert(`Erreur: ${error.message}`)
+    }
+  }
+
+  const handleSave = (memberData: any) => {
+    if (editMember) {
+      updateMember(memberData)
+    } else {
+      addMember(memberData)
+    }
+  }
+
+  const filtered = members.filter(m => {
+    const matchSearch = `${m.nom} ${m.prenom} ${m.telephone}`.toLowerCase().includes(search.toLowerCase())
+    const matchFaritra = filterFaritra === 'all' || m.faritra === filterFaritra
+    const matchSokajy = filterSokajy === 'all' || m.sokajy === filterSokajy
+    return matchSearch && matchFaritra && matchSokajy
+  })
+
+  const stats = {
+    total: members.length,
+    pasteurs: members.filter(m => m.sokajy === 'Pasteur').length,
+    mpandray: members.filter(m => m.sokajy === 'Mpandray').length,
+    diakona: members.filter(m => m.sokajy === 'Diakona').length,
+    vitaBatisa: members.filter(m => m.sokajy === 'Vita batisa').length,
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       {/* Stats rapides */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          { label: 'Total', value: members.length, icon: Users, color: 'bg-indigo-500' },
-          { label: 'Actifs', value: members.filter(m => m.status === 'actif').length, icon: UserCheck, color: 'bg-green-500' },
-          { label: 'Inactifs', value: members.filter(m => m.status === 'inactif').length, icon: UserX, color: 'bg-red-500' },
-          { label: 'Visiteurs', value: members.filter(m => m.status === 'visiteur').length, icon: Eye, color: 'bg-amber-500' },
-        ].map(s => (
-          <div key={s.label} className="card flex items-center gap-4">
-            <div className={`w-10 h-10 ${s.color} rounded-xl flex items-center justify-center`}>
-              <s.icon className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-800">{s.value}</p>
-              <p className="text-sm text-gray-500">{s.label}</p>
-            </div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+        <div className="card flex items-center gap-4">
+          <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
+            <Users className="w-5 h-5 text-white" />
           </div>
-        ))}
+          <div>
+            <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
+            <p className="text-sm text-gray-500">Total</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4">
+          <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center">
+            <UserCheck className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-800">{stats.pasteurs}</p>
+            <p className="text-sm text-gray-500">Pasteurs</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4">
+          <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
+            <UserCheck className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-800">{stats.mpandray}</p>
+            <p className="text-sm text-gray-500">Mpandray</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4">
+          <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
+            <UserCheck className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-800">{stats.diakona}</p>
+            <p className="text-sm text-gray-500">Diakona</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4">
+          <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center">
+            <UserCheck className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-800">{stats.vitaBatisa}</p>
+            <p className="text-sm text-gray-500">Vita batisa</p>
+          </div>
+        </div>
       </div>
 
       {/* Filtres & Actions */}
@@ -237,24 +463,26 @@ export default function Membres() {
                 value={search} onChange={e => setSearch(e.target.value)}
               />
             </div>
-            <select className="input-field max-w-[160px]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-              <option value="all">Tous statuts</option>
-              <option value="actif">Actifs</option>
-              <option value="inactif">Inactifs</option>
-              <option value="visiteur">Visiteurs</option>
+            <select className="input-field max-w-[160px]" value={filterFaritra} onChange={e => setFilterFaritra(e.target.value)}>
+              <option value="all">Toutes régions</option>
+              {faritras.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
-            <select className="input-field max-w-[160px]" value={filterRole} onChange={e => setFilterRole(e.target.value)}>
-              <option value="all">Tous rôles</option>
-              <option value="pasteur">Pasteur</option>
-              <option value="ancien">Ancien</option>
-              <option value="diacre">Diacre</option>
-              <option value="responsable">Responsable</option>
-              <option value="membre">Membre</option>
+            <select className="input-field max-w-[180px]" value={filterSokajy} onChange={e => setFilterSokajy(e.target.value)}>
+              <option value="all">Tous les rôles</option>
+              <option value="Pasteur">Pasteur</option>
+              <option value="Mpandray">Mpandray</option>
+              <option value="Diakona">Diakona</option>
+              <option value="Vita batisa">Vita batisa</option>
             </select>
           </div>
-          <button onClick={() => { setEditMember(null); setShowModal(true) }} className="btn-primary whitespace-nowrap">
-            <Plus className="w-4 h-4" /> Nouveau membre
-          </button>
+          <div className="flex gap-2">
+            <button onClick={handlePrint} className="btn-secondary whitespace-nowrap">
+              <Printer className="w-4 h-4" /> Imprimer
+            </button>
+            <button onClick={() => { setEditMember(null); setShowModal(true) }} className="btn-primary whitespace-nowrap">
+              <Plus className="w-4 h-4" /> Nouveau membre
+            </button>
+          </div>
         </div>
         <p className="text-sm text-gray-500 mt-2">{filtered.length} membre(s) trouvé(s)</p>
       </div>
@@ -267,9 +495,9 @@ export default function Membres() {
               <tr>
                 <th className="table-header">Membre</th>
                 <th className="table-header hidden sm:table-cell">Contact</th>
-                <th className="table-header">Rôle</th>
-                <th className="table-header">Statut</th>
-                <th className="table-header hidden lg:table-cell">Adhésion</th>
+                <th className="table-header">Rôle / Catégorie</th>
+                <th className="table-header hidden lg:table-cell">Région</th>
+                <th className="table-header hidden lg:table-cell">Date d'ajout</th>
                 <th className="table-header text-right">Actions</th>
               </tr>
             </thead>
@@ -280,27 +508,29 @@ export default function Membres() {
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0">
                         <span className="text-sm font-bold text-indigo-700">
-                          {member.firstName[0]}{member.lastName[0]}
+                          {member.prenom?.[0]}{member.nom?.[0]}
                         </span>
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-800">{member.firstName} {member.lastName}</p>
-                        <p className="text-xs text-gray-500 sm:hidden">{member.email}</p>
+                        <p className="font-semibold text-gray-800">{member.prenom} {member.nom}</p>
+                        <p className="text-xs text-gray-500 sm:hidden">{member.telephone}</p>
                       </div>
                     </div>
                   </td>
                   <td className="table-cell hidden sm:table-cell">
-                    <p className="text-sm text-gray-600">{member.email}</p>
-                    <p className="text-xs text-gray-400">{member.phone}</p>
+                    <p className="text-sm text-gray-600">{member.telephone || '-'}</p>
+                    <p className="text-xs text-gray-400">{member.adresse?.substring(0, 30)}</p>
                   </td>
                   <td className="table-cell">
-                    <span className={`badge ${roleColors[member.role]}`}>{member.role}</span>
-                  </td>
-                  <td className="table-cell">
-                    <span className={`badge ${statusColors[member.status]}`}>{member.status}</span>
+                    <span className={`badge ${roleColors[member.sokajy] || roleColors.membre}`}>
+                      {roleLabels[member.sokajy] || member.sokajy}
+                    </span>
                   </td>
                   <td className="table-cell hidden lg:table-cell text-gray-500">
-                    {format(new Date(member.joinDate), 'd MMM yyyy', { locale: fr })}
+                    {member.faritra || '-'}
+                  </td>
+                  <td className="table-cell hidden lg:table-cell text-gray-500">
+                    {format(new Date(member.created_at), 'd MMM yyyy', { locale: fr })}
                   </td>
                   <td className="table-cell text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -312,7 +542,7 @@ export default function Membres() {
                         className="p-1.5 hover:bg-amber-50 rounded-lg text-amber-600 transition-colors">
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(member.id)}
+                      <button onClick={() => deleteMember(member.id)}
                         className="p-1.5 hover:bg-red-50 rounded-lg text-red-600 transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -338,6 +568,7 @@ export default function Membres() {
           member={editMember}
           onClose={() => { setShowModal(false); setEditMember(null) }}
           onSave={handleSave}
+          saving={saving}
         />
       )}
       {viewMember && (
