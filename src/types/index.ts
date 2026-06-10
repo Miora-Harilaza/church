@@ -39,6 +39,7 @@ export interface Budget {
 
 // ===== EVENEMENT =====
 export interface ChurchEvent {
+  image_ur: any;
   id: string;
   title: string;
   description: string;
