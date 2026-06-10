@@ -44,8 +44,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               <Church className="w-6 h-6 text-indigo-700" />
             </div>
             <div>
-              <h1 className="text-white font-bold text-lg leading-tight">ChurchManager</h1>
-              <p className="text-indigo-300 text-xs">Gestion d'Église</p>
+              <h1 className="text-white font-bold text-lg leading-tight">FJKM - AntsoMaFi</h1>
+              <p className="text-indigo-300 text-xs">Antsongo Mandroso Fiderana</p>
             </div>
           </div>
           <button onClick={onClose} className="lg:hidden text-indigo-300 hover:text-white">
@@ -88,8 +88,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
         {/* Version */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-indigo-700">
-          <p className="text-indigo-400 text-xs text-center">ChurchManager v1.0</p>
-          <p className="text-indigo-500 text-xs text-center">Saison 2024-2025</p>
+          <p className="text-indigo-400 text-xs text-center">FJKM - AntsoMaFi v1.0</p>
+      
         </div>
       </aside>
     </>
